@@ -3,7 +3,7 @@
 
 [![My NIP-05](https://img.shields.io/badge/NIP--05-__@dukenukemmustdie.com-8E44AD?logo=nostr&logoColor=white)](https://dukenukemmustdie.com)
 
-**Adresu Kit** is a modular, high-performance Go library of reusable components for **embedding** Nostr policy logic into your applications. It was originally extracted from the battle-tested [Adresu Plugin](https://github.com/lessucettes/adresu-plugin) for the `strfry` relay.
+**Adresu Kit** is a modular, high-performance Go library of reusable components for embedding Nostr policy logic into your applications. It was originally extracted from the battle-tested [Adresu Plugin](https://github.com/lessucettes/adresu-plugin) for the `strfry` relay.
 
 The library provides a collection of configurable, stateful, and stateless filters to validate and reject Nostr events based on a wide range of criteria.
 
@@ -13,7 +13,7 @@ The library provides a collection of configurable, stateful, and stateless filte
 go get github.com/lessucettes/adresu-kit@latest
 ```
 
-## Usage
+## 💡 Usage
 
 Each filter is self-contained and can be instantiated via its configuration struct. The `Match` method returns `true` if the event passes the filter's checks, or `false` and an error describing the reason for rejection.
 
@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"adresu-kit/config"
 	"adresu-kit/filters"
-	"[github.com/nbd-wtf/go-nostr](https://github.com/nbd-wtf/go-nostr)"
+	"github.com/nbd-wtf/go-nostr"
 )
 
 func main() {
