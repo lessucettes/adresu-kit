@@ -1,5 +1,7 @@
 # Adresu Kit
 
+[![My NIP-05](https://img.shields.io/badge/NIP--05-__@dukenukemmustdie.com-8E44AD?logo=nostr&logoColor=white)](https://dukenukemmustdie.com)
+
 A library of reusable components for embedding Nostr policy logic.
 
 This library contains a collection of stateless and stateful filters for processing and enforcing policies on Nostr events.
