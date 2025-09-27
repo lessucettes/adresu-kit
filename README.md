@@ -10,7 +10,7 @@ The library provides a collection of configurable, stateful, and stateless filte
 ## 🚀 Installation
 
 ```bash
-go get [github.com/lessucettes/adresu-kit@latest](https://github.com/lessucettes/adresu-kit@latest)
+go get github.com/lessucettes/adresu-kit@latest
 ```
 
 ## Usage
