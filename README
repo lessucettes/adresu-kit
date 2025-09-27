@@ -1,3 +1,4 @@
+
 # Adresu Kit
 
 [![My NIP-05](https://img.shields.io/badge/NIP--05-__@dukenukemmustdie.com-8E44AD?logo=nostr&logoColor=white)](https://dukenukemmustdie.com)
@@ -6,7 +7,7 @@
 
 The library provides a collection of configurable, stateful, and stateless filters to validate and reject Nostr events based on a wide range of criteria.
 
-## Installation
+## 🚀 Installation
 
 ```bash
 go get [github.com/lessucettes/adresu-kit@latest](https://github.com/lessucettes/adresu-kit@latest)
@@ -48,7 +49,7 @@ func main() {
 }
 ```
 
-## Filters Overview
+## 🛡️ Filters Overview
 
 ### Stateless Filters
 
@@ -70,12 +71,12 @@ These filters maintain an internal state (usually in an LRU cache) to make decis
   * **EphemeralChatFilter**: A specialized set of rules for chat kinds, including anti-flood delays, limits on capital letters, character repetition, and a hybrid PoW-on-rate-limit system.
   * **EmergencyFilter**: A DDoS mitigation filter that rate-limits the arrival of new, previously unseen public keys, both globally and on a per-IP basis.
 
-## Utilities
+## ⚙️ Utilities
 
 The `nip` package provides helper functions for working with Nostr Improvement Proposals.
 
   * **NIP-13**: `nip.IsPoWValid()` checks if an event has a valid Proof-of-Work nonce of a given difficulty.
 
-## License
+## 📄 License
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.
