@@ -1,4 +1,3 @@
-// policy/size_filter.go
 package policy
 
 import (

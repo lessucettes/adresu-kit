@@ -3,6 +3,7 @@ module github.com/lessucettes/adresu-kit
 go 1.25.1
 
 require (
+	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/nbd-wtf/go-nostr v0.52.0
 	github.com/pemistahl/lingua-go v1.4.0
@@ -11,7 +12,6 @@ require (
 
 require (
 	github.com/ImVexed/fasturl v0.0.0-20230304231329-4e41488060f3 // indirect
-	github.com/btcsuite/btcd/btcec/v2 v2.3.4 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
 	github.com/bytedance/sonic v1.13.1 // indirect
 	github.com/bytedance/sonic/loader v0.2.4 // indirect

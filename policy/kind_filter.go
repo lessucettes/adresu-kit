@@ -1,4 +1,3 @@
-// policy/kind_filter.go
 package policy
 
 import (

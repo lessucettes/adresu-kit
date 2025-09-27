@@ -1,81 +1,93 @@
-
 # Adresu Kit
 
-[![My NIP-05](https://img.shields.io/badge/NIP--05-__@dukenukemmustdie.com-8E44AD?logo=nostr&logoColor=white)](https://dukenukemmustdie.com)
+A library of reusable components for embedding Nostr policy logic.
 
-**Adresu Kit** is a modular, high-performance Go library of reusable components for embedding Nostr policy logic into your applications. It was originally extracted from the battle-tested [Adresu Plugin](https://github.com/lessucettes/adresu-plugin) for the `strfry` relay.
+This library contains a collection of stateless and stateful filters for processing and enforcing policies on Nostr events.
 
-The library provides a collection of configurable, stateful, and stateless filters to validate and reject Nostr events based on a wide range of criteria.
+---
 
 ## 🚀 Installation
 
 ```bash
-go get github.com/lessucettes/adresu-kit@latest
+go get https://github.com/lessucettes/adresu-kit@latest
 ```
 
-## 💡 Usage
+-----
 
-Each filter is self-contained and can be instantiated via its configuration struct. The `Match` method returns `true` if the event passes the filter's checks, or `false` and an error describing the reason for rejection.
+## ✨ Usage
+
+Each filter is created via a constructor that accepts a configuration struct. The constructor returns the filter, a slice of warnings for any non-critical issues, and a fatal error.
 
 ```go
 package main
 
 import (
 	"fmt"
-	"adresu-kit/config"
-	"adresu-kit/filters"
+	"log"
+	"github.com/lessucettes/adresu-kit/config"
+	"github.com/lessucettes/adresu-kit/policy"
 	"github.com/nbd-wtf/go-nostr"
 )
 
 func main() {
 	// 1. Configure the filter
-	cfg := &config.KindFilterConfig{
-		DeniedKinds: []int{4}, // Deny kind 4 (DMs)
+	cfg := &config.KindFilterConfig{ DeniedKinds: []int{4} }
+
+	// 2. Create a new filter instance, checking for warnings and errors
+	kindFilter, warnings, err := policy.NewKindFilter(cfg)
+	if err != nil {
+		log.Fatalf("Failed to create filter: %v", err)
+	}
+	for _, w := range warnings {
+		log.Printf("Configuration warning: %s", w)
 	}
 
-	// 2. Create a new filter instance
-	kindFilter, _, _ := filters.NewKindFilter(cfg.AllowedKinds, cfg.DeniedKinds)
-
 	// 3. Create a sample event
-	dmEvent := &nostr.Event{Kind: 4}
+	event := &nostr.Event{Kind: 4}
 
 	// 4. Match the event against the filter
-	pass, reason := kindFilter.Match(nil, dmEvent, nil)
+	pass, reason := kindFilter.Match(nil, event, nil)
 
 	if !pass {
-		fmt.Printf("Event was rejected: %s\n", reason)
-		// Output: Event was rejected: blocked: event kind 4 is on the denylist
+		fmt.Println(reason) // blocked: event kind 4 is on the denylist
 	}
 }
 ```
 
-## 🛡️ Filters Overview
+-----
+
+## 🛡️ Filters
 
 ### Stateless Filters
 
-These filters make decisions based solely on the event's content.
+Decision is based only on the event's content.
 
-  * **KindFilter**: Accepts or rejects events based on their `kind` number, using allow/deny lists.
-  * **FreshnessFilter**: Rejects events with a `created_at` timestamp that is too old or too far in the future.
-  * **SizeFilter**: Rejects events that exceed a configured size limit in bytes.
-  * **TagsFilter**: Enforces rules on event tags, such as maximum total count, required tags, or limits on specific tag types (e.g., max 4 `#p` tags).
-  * **KeywordFilter**: Scans event content for deny-listed words or patterns using regular expressions.
+  * **KindFilter**: Filters by `kind` based on allow/deny lists.
+  * **FreshnessFilter**: Filters by `created_at` timestamp against `max_past` and `max_future` durations.
+  * **SizeFilter**: Filters by the total byte size of the marshaled event.
+  * **TagsFilter**: Enforces limits on tag count, required tags, and per-tag-name counts.
+  * **KeywordFilter**: Filters by content using simple word matching or regular expressions.
 
 ### Stateful Filters
 
-These filters maintain an internal state (usually in an LRU cache) to make decisions based on patterns over time.
+Decision is based on an internal state (LRU cache) that tracks patterns over time.
 
-  * **LanguageFilter**: Rejects events written in non-approved languages using the `lingua-go` library. Maintains a cache of authors who have already passed the check.
-  * **RateLimiterFilter**: Limits the number of events a user or IP address can send in a given time window.
-  * **RepostAbuseFilter**: Tracks the ratio of reposts to original content for each user, rejecting further reposts if the ratio exceeds a threshold.
-  * **EphemeralChatFilter**: A specialized set of rules for chat kinds, including anti-flood delays, limits on capital letters, character repetition, and a hybrid PoW-on-rate-limit system.
-  * **EmergencyFilter**: A DDoS mitigation filter that rate-limits the arrival of new, previously unseen public keys, both globally and on a per-IP basis.
+  * **LanguageFilter**: Filters by language. Caches authors who pass the check.
+  * **RateLimiterFilter**: Limits event frequency per `pubkey`, `ip`, or both.
+  * **RepostAbuseFilter**: Tracks the repost-to-original-post ratio for users.
+  * **EphemeralChatFilter**: Applies a set of strict rules for chat kinds (flood delay, caps ratio, PoW fallback).
+  * **EmergencyFilter**: A DDoS mitigation filter that rate-limits new, unseen pubkeys.
+
+-----
 
 ## ⚙️ Utilities
 
-The `nip` package provides helper functions for working with Nostr Improvement Proposals.
+The `nip` package contains helpers for specific NIPs.
 
-  * **NIP-13**: `nip.IsPoWValid()` checks if an event has a valid Proof-of-Work nonce of a given difficulty.
+  * **NIP-13**: `nip.IsPoWValid()` for validating Proof-of-Work.
+  * **NIP-26**: `nip.ValidateDelegation()` for validating delegated events.
+
+-----
 
 ## 📄 License
 

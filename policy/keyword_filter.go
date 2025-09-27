@@ -1,4 +1,3 @@
-// policy/keyword_filter.go
 package policy
 
 import (

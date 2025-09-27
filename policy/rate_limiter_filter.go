@@ -1,4 +1,3 @@
-// policy/rate_limiter_filter.go
 package policy
 
 import (

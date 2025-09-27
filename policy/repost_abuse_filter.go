@@ -1,4 +1,3 @@
-// policy/repost_abuse_filter.go
 package policy
 
 import (

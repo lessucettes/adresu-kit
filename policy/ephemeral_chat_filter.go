@@ -1,4 +1,3 @@
-// policy/ephemeral_chat_filter.go
 package policy
 
 import (

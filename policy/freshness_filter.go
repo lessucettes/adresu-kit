@@ -1,4 +1,3 @@
-// policy/freshness_filter.go
 package policy
 
 import (

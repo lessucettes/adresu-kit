@@ -1,4 +1,3 @@
-// policy/emergency_filter.go
 package policy
 
 import (

@@ -1,4 +1,3 @@
-// policy/language_filter.go
 package policy
 
 import (
