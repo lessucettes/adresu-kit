@@ -59,6 +59,11 @@ type RateLimiterConfig struct {
 	Rules        []RateLimitRule `toml:"rule"`
 }
 
+type KindFilterConfig struct {
+	AllowedKinds []int `toml:"allowed_kinds"`
+	DeniedKinds  []int `toml:"denied_kinds"`
+}
+
 type FreshnessRule struct {
 	Kinds       []int         `toml:"kinds"`
 	Description string        `toml:"description"`

@@ -2,10 +2,10 @@
 package policy
 
 import (
-	"adresu-kit/config"
 	"context"
 	"fmt"
 
+	"github.com/lessucettes/adresu-kit/config"
 	"github.com/nbd-wtf/go-nostr"
 )
 

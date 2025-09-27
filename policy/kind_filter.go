@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/lessucettes/adresu-kit/config"
 	"github.com/nbd-wtf/go-nostr"
 )
 
@@ -12,15 +13,15 @@ type KindFilter struct {
 	allowed, denied map[int]struct{}
 }
 
-func NewKindFilter(allowedKinds, deniedKinds []int) (*KindFilter, []string, error) {
-	deniedMap := make(map[int]struct{}, len(deniedKinds))
-	for _, kind := range deniedKinds {
+func NewKindFilter(cfg *config.KindFilterConfig) (*KindFilter, []string, error) {
+	deniedMap := make(map[int]struct{}, len(cfg.DeniedKinds))
+	for _, kind := range cfg.DeniedKinds {
 		deniedMap[kind] = struct{}{}
 	}
 	var allowedMap map[int]struct{}
-	if len(allowedKinds) > 0 {
-		allowedMap = make(map[int]struct{}, len(allowedKinds))
-		for _, kind := range allowedKinds {
+	if len(cfg.AllowedKinds) > 0 {
+		allowedMap = make(map[int]struct{}, len(cfg.AllowedKinds))
+		for _, kind := range cfg.AllowedKinds {
 			allowedMap[kind] = struct{}{}
 		}
 	}

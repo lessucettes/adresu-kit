@@ -2,7 +2,6 @@
 package policy
 
 import (
-	"adresu-kit/config"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"sync"
 
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/lessucettes/adresu-kit/config"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/pemistahl/lingua-go"
 )

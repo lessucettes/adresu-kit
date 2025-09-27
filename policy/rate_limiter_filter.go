@@ -2,13 +2,13 @@
 package policy
 
 import (
-	"adresu-kit/config"
 	"context"
 	"fmt"
 	"strconv"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/lessucettes/adresu-kit/config"
 	"github.com/nbd-wtf/go-nostr"
 	"golang.org/x/time/rate"
 )
