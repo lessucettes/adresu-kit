@@ -18,14 +18,16 @@ go get https://github.com/lessucettes/adresu-kit@latest
 
 ## ✨ Usage
 
-Each filter is created via a constructor that accepts a configuration struct. The constructor returns the filter, a slice of warnings for any non-critical issues, and a fatal error.
+Each filter is created via a constructor that accepts a configuration struct. The `Match` method returns a structured `FilterResult` containing the decision, reason, and other metadata.
 
 ```go
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+
 	"github.com/lessucettes/adresu-kit/config"
 	"github.com/lessucettes/adresu-kit/policy"
 	"github.com/nbd-wtf/go-nostr"
@@ -33,25 +35,34 @@ import (
 
 func main() {
 	// 1. Configure the filter
-	cfg := &config.KindFilterConfig{ DeniedKinds: []int{4} }
+	cfg := &config.KindFilterConfig{DeniedKinds: []int{4}}
 
-	// 2. Create a new filter instance, checking for warnings and errors
-	kindFilter, warnings, err := policy.NewKindFilter(cfg)
+	// 2. Create a new filter instance.
+	// Constructors return only the filter and a critical error.
+	// Configuration warnings are logged automatically during creation.
+	kindFilter, err := policy.NewKindFilter(cfg)
 	if err != nil {
 		log.Fatalf("Failed to create filter: %v", err)
-	}
-	for _, w := range warnings {
-		log.Printf("Configuration warning: %s", w)
 	}
 
 	// 3. Create a sample event
 	event := &nostr.Event{Kind: 4}
 
-	// 4. Match the event against the filter
-	pass, reason := kindFilter.Match(nil, event, nil)
+	// 4. Match the event against the filter.
+	// The Match method returns a structured FilterResult and a critical error.
+	res, err := kindFilter.Match(context.Background(), event, nil)
+	if err != nil {
+		// This handles critical errors within the filter's execution.
+		log.Fatalf("Filter failed to execute: %v", err)
+	}
 
-	if !pass {
-		fmt.Println(reason) // blocked: event kind 4 is on the denylist
+	// 5. Check the result
+	if !res.Allowed {
+		// The result struct contains the decision, filter name, reason, and duration.
+		fmt.Printf("Filter '%s' rejected the event. Reason: %s\n", res.Filter, res.Reason)
+		// Example output: Filter 'KindFilter' rejected the event. Reason: kind_4_denied
+	} else {
+		fmt.Printf("Filter '%s' allowed the event in %s.\n", res.Filter, res.Duration)
 	}
 }
 ```
