@@ -2,13 +2,16 @@ package policy
 
 import (
 	"context"
-	"errors"
 	"net"
 
 	lru "github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/lessucettes/adresu-kit/config"
 	"github.com/nbd-wtf/go-nostr"
 	"golang.org/x/time/rate"
+)
+
+const (
+	emergencyFilterName = "EmergencyFilter"
 )
 
 type EmergencyFilter struct {
@@ -24,9 +27,9 @@ type EmergencyFilter struct {
 	ipv6Prefix int
 }
 
-func NewEmergencyFilter(cfg *config.EmergencyFilterConfig) (*EmergencyFilter, []string, error) {
+func NewEmergencyFilter(cfg *config.EmergencyFilterConfig) (*EmergencyFilter, error) {
 	if cfg == nil || !cfg.Enabled {
-		return &EmergencyFilter{}, nil, nil
+		return &EmergencyFilter{}, nil
 	}
 
 	filter := &EmergencyFilter{
@@ -43,45 +46,46 @@ func NewEmergencyFilter(cfg *config.EmergencyFilterConfig) (*EmergencyFilter, []
 		filter.ipv6Prefix = cfg.PerIP.IPv6Prefix
 	}
 
-	return filter, nil, nil
+	return filter, nil
 }
 
-func (f *EmergencyFilter) Match(ctx context.Context, ev *nostr.Event, meta map[string]any) (bool, error) {
+func (f *EmergencyFilter) Match(_ context.Context, ev *nostr.Event, meta map[string]any) (FilterResult, error) {
+	newResult := NewResultFunc(emergencyFilterName)
+
 	if f.newKeyLimiter == nil {
-		return true, nil
+		return newResult(true, "filter_disabled", nil)
 	}
+
 	pk := ev.PubKey
 	if pk == "" {
-		return true, nil
+		return newResult(true, "pubkey_empty", nil)
 	}
 	if _, ok := f.recentSeen.Get(pk); ok {
-		return true, nil
+		return newResult(true, "pubkey_recently_seen", nil)
 	}
 
 	if f.perIPEnabled {
 		if remoteIP, ok := meta["remote_ip"].(string); ok && remoteIP != "" {
 			key := normalizeIPWithOptionalPrefixes(remoteIP, f.ipv4Prefix, f.ipv6Prefix)
 
-			var lim *rate.Limiter
-			if l, ok := f.perIPLimiters.Get(key); ok {
-				lim = l
-			} else {
+			lim, ok := f.perIPLimiters.Get(key)
+			if !ok {
 				lim = rate.NewLimiter(f.perIPRate, f.perIPBurst)
 				f.perIPLimiters.Add(key, lim)
 			}
 
 			if !lim.Allow() {
-				return false, errors.New("blocked: emergency per-ip limit for new pubkeys exceeded")
+				return newResult(false, "new_pubkey_rate_limit_exceeded_per_ip", nil)
 			}
 		}
 	}
 
 	if !f.newKeyLimiter.Allow() {
-		return false, errors.New("blocked: emergency global limit for new pubkeys exceeded")
+		return newResult(false, "new_pubkey_rate_limit_exceeded_global", nil)
 	}
 
 	f.recentSeen.Add(pk, struct{}{})
-	return true, nil
+	return newResult(true, "new_pubkey_accepted", nil)
 }
 
 func normalizeIPWithOptionalPrefixes(ipStr string, v4Prefix, v6Prefix int) string {

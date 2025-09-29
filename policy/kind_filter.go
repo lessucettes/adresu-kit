@@ -1,3 +1,4 @@
+// path: adresu-kit/policy/kind_filter.go
 package policy
 
 import (
@@ -8,15 +9,20 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
+const (
+	kindFilterName = "KindFilter"
+)
+
 type KindFilter struct {
 	allowed, denied map[int]struct{}
 }
 
-func NewKindFilter(cfg *config.KindFilterConfig) (*KindFilter, []string, error) {
+func NewKindFilter(cfg *config.KindFilterConfig) (*KindFilter, error) {
 	deniedMap := make(map[int]struct{}, len(cfg.DeniedKinds))
 	for _, kind := range cfg.DeniedKinds {
 		deniedMap[kind] = struct{}{}
 	}
+
 	var allowedMap map[int]struct{}
 	if len(cfg.AllowedKinds) > 0 {
 		allowedMap = make(map[int]struct{}, len(cfg.AllowedKinds))
@@ -25,20 +31,26 @@ func NewKindFilter(cfg *config.KindFilterConfig) (*KindFilter, []string, error) 
 		}
 	}
 
-	filter := &KindFilter{allowed: allowedMap, denied: deniedMap}
+	filter := &KindFilter{
+		allowed: allowedMap,
+		denied:  deniedMap,
+	}
 
-	return filter, nil, nil
+	return filter, nil
 }
 
-func (f *KindFilter) Match(ctx context.Context, event *nostr.Event, meta map[string]any) (bool, error) {
-	// Denylist has priority.
+func (f *KindFilter) Match(_ context.Context, event *nostr.Event, meta map[string]any) (FilterResult, error) {
+	newResult := NewResultFunc(kindFilterName)
+
 	if _, isDenied := f.denied[event.Kind]; isDenied {
-		return false, fmt.Errorf("blocked: event kind %d is on the denylist", event.Kind)
+		return newResult(false, fmt.Sprintf("kind_%d_denied", event.Kind), nil)
 	}
+
 	if f.allowed != nil {
 		if _, isAllowed := f.allowed[event.Kind]; !isAllowed {
-			return false, fmt.Errorf("blocked: event kind %d is not on the allowlist", event.Kind)
+			return newResult(false, fmt.Sprintf("kind_%d_not_allowed", event.Kind), nil)
 		}
 	}
-	return true, nil
+
+	return newResult(true, "kind_allowed", nil)
 }

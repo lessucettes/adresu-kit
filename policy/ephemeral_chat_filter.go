@@ -2,7 +2,6 @@ package policy
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -16,6 +15,10 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const (
+	ephemeralChatFilterName = "EphemeralChatFilter"
+)
+
 type EphemeralChatFilter struct {
 	cfg        *config.EphemeralChatFilterConfig
 	zalgoRegex *regexp.Regexp
@@ -24,9 +27,9 @@ type EphemeralChatFilter struct {
 	limiters   *lru.LRU[string, *rate.Limiter]
 }
 
-func NewEphemeralChatFilter(cfg *config.EphemeralChatFilterConfig) (*EphemeralChatFilter, []string, error) {
+func NewEphemeralChatFilter(cfg *config.EphemeralChatFilterConfig) (*EphemeralChatFilter, error) {
 	if !cfg.Enabled {
-		return &EphemeralChatFilter{cfg: cfg}, nil, nil
+		return &EphemeralChatFilter{cfg: cfg}, nil
 	}
 
 	var zalgoRegex, wordRegex *regexp.Regexp
@@ -38,7 +41,7 @@ func NewEphemeralChatFilter(cfg *config.EphemeralChatFilterConfig) (*EphemeralCh
 	if cfg.MaxWordLength > 0 {
 		wordRegex, err = regexp.Compile(fmt.Sprintf(`\S{%d,}`, cfg.MaxWordLength))
 		if err != nil {
-			return nil, nil, fmt.Errorf("invalid max_word_length generates bad regexp: %w", err)
+			return nil, fmt.Errorf("invalid max_word_length generates bad regexp: %w", err)
 		}
 	}
 
@@ -57,20 +60,22 @@ func NewEphemeralChatFilter(cfg *config.EphemeralChatFilterConfig) (*EphemeralCh
 		limiters:   limiters,
 	}
 
-	return filter, nil, nil
+	return filter, nil
 }
 
-func (f *EphemeralChatFilter) Match(ctx context.Context, event *nostr.Event, meta map[string]any) (bool, error) {
+func (f *EphemeralChatFilter) Match(_ context.Context, event *nostr.Event, meta map[string]any) (FilterResult, error) {
+	newResult := NewResultFunc(ephemeralChatFilterName)
+
 	if !f.cfg.Enabled || !slices.Contains(f.cfg.Kinds, event.Kind) {
-		return true, nil
+		return newResult(true, "filter_disabled_or_kind_not_matched", nil)
 	}
 
 	if f.lastSeen != nil && f.cfg.MinDelay > 0 {
 		now := time.Now()
 		if last, ok := f.lastSeen.Get(event.PubKey); ok {
-			delay := now.Sub(last)
-			if delay < f.cfg.MinDelay {
-				return false, fmt.Errorf("blocked: posting too frequently in chat (delay: %s, limit: %s)", delay.Round(time.Millisecond), f.cfg.MinDelay)
+			if delay := now.Sub(last); delay < f.cfg.MinDelay {
+				reason := fmt.Sprintf("posting_too_frequently:delay_%.1fs,limit_%.1fs", delay.Seconds(), f.cfg.MinDelay.Seconds())
+				return newResult(false, reason, nil)
 			}
 		}
 		f.lastSeen.Add(event.PubKey, now)
@@ -93,9 +98,9 @@ func (f *EphemeralChatFilter) Match(ctx context.Context, event *nostr.Event, met
 			minLetters = 20
 		}
 		if letters > minLetters {
-			ratio := float64(caps) / float64(letters)
-			if ratio > f.cfg.MaxCapsRatio {
-				return false, fmt.Errorf("blocked: excessive use of capital letters (ratio: %.2f, limit: %.2f)", ratio, f.cfg.MaxCapsRatio)
+			if ratio := float64(caps) / float64(letters); ratio > f.cfg.MaxCapsRatio {
+				reason := fmt.Sprintf("excessive_caps:ratio_%.2f,limit_%.2f", ratio, f.cfg.MaxCapsRatio)
+				return newResult(false, reason, nil)
 			}
 		}
 	}
@@ -111,30 +116,32 @@ func (f *EphemeralChatFilter) Match(ctx context.Context, event *nostr.Event, met
 					count = 1
 				}
 				if count >= f.cfg.MaxRepeatChars {
-					return false, fmt.Errorf("blocked: excessive character repetition (count: %d, limit: %d)", count, f.cfg.MaxRepeatChars)
+					reason := fmt.Sprintf("excessive_char_repetition:count_%d,limit_%d", count, f.cfg.MaxRepeatChars)
+					return newResult(false, reason, nil)
 				}
 			}
 		}
 	}
 
 	if f.wordRegex != nil && f.wordRegex.MatchString(content) {
-		return false, fmt.Errorf("blocked: message contains words that are too long (limit: %d)", f.cfg.MaxWordLength)
+		return newResult(false, fmt.Sprintf("word_too_long:limit_%d", f.cfg.MaxWordLength), nil)
 	}
 
 	if f.zalgoRegex != nil && f.zalgoRegex.MatchString(content) {
-		return false, errors.New("blocked: message contains Zalgo text")
+		return newResult(false, "zalgo_text_detected", nil)
 	}
 
 	limiter := f.getLimiter(event.PubKey)
 	if limiter.Allow() {
-		return true, nil
+		return newResult(true, "rate_limit_ok", nil)
 	}
 
 	if nip.IsPoWValid(event, f.cfg.RequiredPoWOnLimit) {
-		return true, nil
+		return newResult(true, "rate_limit_bypassed_by_pow", nil)
 	}
 
-	return false, fmt.Errorf("blocked: chat rate limit exceeded. Attach PoW of difficulty %d to send", f.cfg.RequiredPoWOnLimit)
+	reason := fmt.Sprintf("rate_limit_exceeded:required_pow_%d", f.cfg.RequiredPoWOnLimit)
+	return newResult(false, reason, nil)
 }
 
 func (f *EphemeralChatFilter) getLimiter(key string) *rate.Limiter {

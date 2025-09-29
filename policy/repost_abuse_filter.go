@@ -13,14 +13,16 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
-// UserActivityStats tracks per-pubkey posting behavior.
+const (
+	repostAbuseFilterName = "RepostAbuseFilter"
+)
+
 type UserActivityStats struct {
 	OriginalPosts int
 	Reposts       int
 	LastEventTime time.Time
 }
 
-// RepostAbuseFilter observes user behavior and rejects users who mostly repost.
 type RepostAbuseFilter struct {
 	mu    sync.Mutex
 	stats *lru.LRU[string, *UserActivityStats]
@@ -29,7 +31,7 @@ type RepostAbuseFilter struct {
 
 var nip21Re = regexp.MustCompile(`\b(naddr1|nevent1|note1)[0-9a-z]+\b`)
 
-func NewRepostAbuseFilter(cfg *config.RepostAbuseFilterConfig) (*RepostAbuseFilter, []string, error) {
+func NewRepostAbuseFilter(cfg *config.RepostAbuseFilterConfig) (*RepostAbuseFilter, error) {
 	size := cfg.CacheSize
 	cache := lru.NewLRU[string, *UserActivityStats](size, nil, cfg.CacheTTL)
 
@@ -44,15 +46,17 @@ func NewRepostAbuseFilter(cfg *config.RepostAbuseFilterConfig) (*RepostAbuseFilt
 		cfg:   cfg,
 	}
 
-	return filter, nil, nil
+	return filter, nil
 }
 
-func (f *RepostAbuseFilter) Match(ctx context.Context, event *nostr.Event, meta map[string]any) (bool, error) {
+func (f *RepostAbuseFilter) Match(_ context.Context, event *nostr.Event, meta map[string]any) (FilterResult, error) {
+	newResult := NewResultFunc(repostAbuseFilterName)
+
 	if !f.cfg.Enabled {
-		return true, nil
+		return newResult(true, "filter_disabled", nil)
 	}
 	if event.Kind != nostr.KindTextNote && event.Kind != nostr.KindRepost && event.Kind != nostr.KindGenericRepost {
-		return true, nil
+		return newResult(true, "kind_not_checked", nil)
 	}
 
 	f.mu.Lock()
@@ -68,8 +72,8 @@ func (f *RepostAbuseFilter) Match(ctx context.Context, event *nostr.Event, meta 
 	f.mu.Unlock()
 
 	isRepost, _ := f.isRepostNIP18(event)
+	var rejectionReason string
 
-	var rejectionError error
 	if isRepost {
 		total := statsCopy.OriginalPosts + statsCopy.Reposts
 		if total >= f.cfg.MinEvents {
@@ -82,8 +86,8 @@ func (f *RepostAbuseFilter) Match(ctx context.Context, event *nostr.Event, meta 
 			if currentRatio >= f.cfg.MaxRatio {
 				ratioPercent := currentRatio * 100
 				limitPercent := f.cfg.MaxRatio * 100
-				rejectionError = fmt.Errorf(
-					"blocked: too many reposts. Your repost ratio would be %.1f%%, the limit is %.1f%%",
+				rejectionReason = fmt.Sprintf(
+					"repost_ratio_too_high:would_be_%.1f%%,limit_is_%.1f%%",
 					ratioPercent, limitPercent,
 				)
 			}
@@ -100,10 +104,10 @@ func (f *RepostAbuseFilter) Match(ctx context.Context, event *nostr.Event, meta 
 			fresh.OriginalPosts, fresh.Reposts = 0, 0
 		}
 	}
-	if rejectionError == nil || f.cfg.CountRejectAsActivity {
+	if rejectionReason == "" || f.cfg.CountRejectAsActivity {
 		fresh.LastEventTime = time.Now()
 	}
-	if rejectionError == nil {
+	if rejectionReason == "" {
 		if isRepost {
 			fresh.Reposts++
 		} else {
@@ -113,25 +117,20 @@ func (f *RepostAbuseFilter) Match(ctx context.Context, event *nostr.Event, meta 
 	f.stats.Add(event.PubKey, fresh)
 	f.mu.Unlock()
 
-	if rejectionError != nil {
-		return false, rejectionError
+	if rejectionReason != "" {
+		return newResult(false, rejectionReason, nil)
 	}
-	return true, nil
+	return newResult(true, "repost_ratio_ok", nil)
 }
 
-// isRepostNIP18 classifies events as reposts per NIP-18.
-// Returns (true, classification) if it's a repost, where classification is one of
-// "kind6", "kind16", "quote1". Otherwise returns (false, "").
 func (f *RepostAbuseFilter) isRepostNIP18(ev *nostr.Event) (bool, string) {
 	switch ev.Kind {
-	case nostr.KindRepost: // 6
+	case nostr.KindRepost:
 		return true, "kind6"
-	case 16: // generic repost
+	case 16:
 		return true, "kind16"
-	case nostr.KindTextNote: // 1
-		// Quote reposts: kind 1 with a 'q' tag.
+	case nostr.KindTextNote:
 		if hasTag(ev, "q") {
-			// Optionally require NIP-21 ref in content for stricter quote detection.
 			if !f.cfg.RequireNIP21InQuote || contentHasNIP21Ref(ev.Content) {
 				return true, "quote1"
 			}

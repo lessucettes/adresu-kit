@@ -3,21 +3,25 @@ package policy
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"github.com/lessucettes/adresu-kit/config"
 	"github.com/nbd-wtf/go-nostr"
 )
 
+const (
+	tagsFilterName = "TagsFilter"
+)
+
 type TagsFilter struct{ kindToRule map[int]processedTagRule }
 
-// processedTagRule holds a pre-compiled, ready-to-use version of a rule.
 type processedTagRule struct {
 	source       *config.TagRule
 	requiredTags map[string]struct{}
 	maxTagCounts map[string]int
 }
 
-func NewTagsFilter(cfg *config.TagsFilterConfig) (*TagsFilter, []string, error) {
+func NewTagsFilter(cfg *config.TagsFilterConfig) (*TagsFilter, error) {
 	kindMap := make(map[int]processedTagRule)
 	if cfg != nil {
 		for i := range cfg.Rules {
@@ -33,9 +37,7 @@ func NewTagsFilter(cfg *config.TagsFilterConfig) (*TagsFilter, []string, error) 
 				}
 			}
 			if len(rule.MaxTagCounts) > 0 {
-				for key, val := range rule.MaxTagCounts {
-					processed.maxTagCounts[key] = val
-				}
+				maps.Copy(processed.maxTagCounts, rule.MaxTagCounts)
 			}
 			for _, kind := range rule.Kinds {
 				kindMap[kind] = processed
@@ -44,20 +46,21 @@ func NewTagsFilter(cfg *config.TagsFilterConfig) (*TagsFilter, []string, error) 
 	}
 
 	filter := &TagsFilter{kindToRule: kindMap}
-
-	return filter, nil, nil
+	return filter, nil
 }
 
-func (f *TagsFilter) Match(ctx context.Context, event *nostr.Event, meta map[string]any) (bool, error) {
+func (f *TagsFilter) Match(_ context.Context, event *nostr.Event, meta map[string]any) (FilterResult, error) {
+	newResult := NewResultFunc(tagsFilterName)
+
 	processedRule, exists := f.kindToRule[event.Kind]
 	if !exists {
-		return true, nil
+		return newResult(true, "no_rules_for_kind", nil)
 	}
 	rule := processedRule.source
 
 	if rule.MaxTags != nil && len(event.Tags) > *rule.MaxTags {
-		return false, fmt.Errorf("blocked: too many tags for %s (got %d, max %d)",
-			rule.Description, len(event.Tags), *rule.MaxTags)
+		reason := fmt.Sprintf("too_many_tags:got_%d,max_%d", len(event.Tags), *rule.MaxTags)
+		return newResult(false, reason, nil)
 	}
 
 	if len(processedRule.requiredTags) > 0 || len(processedRule.maxTagCounts) > 0 {
@@ -65,7 +68,7 @@ func (f *TagsFilter) Match(ctx context.Context, event *nostr.Event, meta map[str
 		specificTagCounts := make(map[string]int, len(processedRule.maxTagCounts))
 
 		for _, tag := range event.Tags {
-			if len(tag) == 0 || tag[0] == "" {
+			if len(tag) == 0 {
 				continue
 			}
 			tagName := tag[0]
@@ -80,18 +83,19 @@ func (f *TagsFilter) Match(ctx context.Context, event *nostr.Event, meta map[str
 
 		for reqTag := range processedRule.requiredTags {
 			if !requiredFound[reqTag] {
-				return false, fmt.Errorf("blocked: missing required tag '%s' for %s", reqTag, rule.Description)
+				reason := fmt.Sprintf("missing_required_tag:'%s'", reqTag)
+				return newResult(false, reason, nil)
 			}
 		}
 
 		for tagName, limit := range processedRule.maxTagCounts {
 			count := specificTagCounts[tagName]
 			if count > limit {
-				return false, fmt.Errorf("blocked: too many '%s' tags for %s (got %d, max %d)",
-					tagName, rule.Description, count, limit)
+				reason := fmt.Sprintf("too_many_tags:'%s',got_%d,max_%d", tagName, count, limit)
+				return newResult(false, reason, nil)
 			}
 		}
 	}
 
-	return true, nil
+	return newResult(true, "tags_ok", nil)
 }

@@ -9,6 +9,10 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
+const (
+	freshnessFilterName = "FreshnessFilter"
+)
+
 type timeLimits struct {
 	MaxPast   time.Duration
 	MaxFuture time.Duration
@@ -19,8 +23,9 @@ type FreshnessFilter struct {
 	rulesByKind map[int]timeLimits
 }
 
-func NewFreshnessFilter(cfg *config.FreshnessFilterConfig) (*FreshnessFilter, []string, error) {
+func NewFreshnessFilter(cfg *config.FreshnessFilterConfig) (*FreshnessFilter, error) {
 	rulesByKind := make(map[int]timeLimits)
+
 	if cfg != nil {
 		for _, rule := range cfg.Rules {
 			limits := timeLimits{
@@ -38,10 +43,12 @@ func NewFreshnessFilter(cfg *config.FreshnessFilterConfig) (*FreshnessFilter, []
 		rulesByKind: rulesByKind,
 	}
 
-	return filter, nil, nil
+	return filter, nil
 }
 
-func (f *FreshnessFilter) Match(ctx context.Context, event *nostr.Event, meta map[string]any) (bool, error) {
+func (f *FreshnessFilter) Match(_ context.Context, event *nostr.Event, meta map[string]any) (FilterResult, error) {
+	newResult := NewResultFunc(freshnessFilterName)
+
 	maxPast, maxFuture := f.cfg.DefaultMaxPast, f.cfg.DefaultMaxFuture
 
 	if limits, ok := f.rulesByKind[event.Kind]; ok {
@@ -53,15 +60,16 @@ func (f *FreshnessFilter) Match(ctx context.Context, event *nostr.Event, meta ma
 	createdAt := event.CreatedAt.Time()
 
 	age := now.Sub(createdAt)
-	futureOffset := createdAt.Sub(now)
-
 	if maxPast > 0 && age > maxPast {
-		return false, fmt.Errorf("blocked: event is too old (age: %s)", age.Round(time.Second))
+		reason := fmt.Sprintf("event_too_old:age_%s,max_%s", age.Round(time.Second), maxPast)
+		return newResult(false, reason, nil)
 	}
 
+	futureOffset := createdAt.Sub(now)
 	if maxFuture > 0 && futureOffset > maxFuture {
-		return false, fmt.Errorf("blocked: event timestamp is in the future (offset: %s)", futureOffset.Round(time.Second))
+		reason := fmt.Sprintf("event_in_future:offset_%s,max_%s", futureOffset.Round(time.Second), maxFuture)
+		return newResult(false, reason, nil)
 	}
 
-	return true, nil
+	return newResult(true, "timestamp_ok", nil)
 }

@@ -12,6 +12,10 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const (
+	rateLimiterFilterName = "RateLimiterFilter"
+)
+
 type processedRateRule struct {
 	rule *config.RateLimitRule
 	id   string
@@ -23,11 +27,12 @@ type RateLimiterFilter struct {
 	kindToRule map[int]processedRateRule
 }
 
-func NewRateLimiterFilter(cfg *config.RateLimiterConfig) (*RateLimiterFilter, []string, error) {
+func NewRateLimiterFilter(cfg *config.RateLimiterConfig) (*RateLimiterFilter, error) {
 	size := cfg.CacheSize
 	if size <= 0 {
 		size = 65536
 	}
+
 	ttl := cfg.TTL
 	if ttl <= 0 {
 		ttl = time.Minute * 10
@@ -53,12 +58,14 @@ func NewRateLimiterFilter(cfg *config.RateLimiterConfig) (*RateLimiterFilter, []
 		kindToRule: kindMap,
 	}
 
-	return filter, nil, nil
+	return filter, nil
 }
 
-func (f *RateLimiterFilter) Match(ctx context.Context, event *nostr.Event, meta map[string]any) (bool, error) {
+func (f *RateLimiterFilter) Match(_ context.Context, event *nostr.Event, meta map[string]any) (FilterResult, error) {
+	newResult := NewResultFunc(rateLimiterFilterName)
+
 	if !f.cfg.Enabled {
-		return true, nil
+		return newResult(true, "filter_disabled", nil)
 	}
 
 	var currentRate float64
@@ -79,10 +86,10 @@ func (f *RateLimiterFilter) Match(ctx context.Context, event *nostr.Event, meta 
 	}
 
 	if currentRate <= 0 {
-		return true, nil
+		return newResult(true, "rate_unlimited_for_kind", nil)
 	}
 
-	var userKeys []string
+	userKeys := make([]string, 0, 2)
 	remoteIP, _ := meta["remote_ip"].(string)
 
 	switch f.cfg.By {
@@ -107,10 +114,11 @@ func (f *RateLimiterFilter) Match(ctx context.Context, event *nostr.Event, meta 
 		cacheKey := fmt.Sprintf("%s:%s", ruleID, userKey)
 		limiter := f.getLimiter(cacheKey, currentRate, currentBurst)
 		if !limiter.Allow() {
-			return false, fmt.Errorf("blocked: rate limit exceeded for %s", ruleDescription)
+			reason := fmt.Sprintf("rate_limit_exceeded:rule:'%s'", ruleDescription)
+			return newResult(false, reason, nil)
 		}
 	}
-	return true, nil
+	return newResult(true, "rate_limit_ok", nil)
 }
 
 func (f *RateLimiterFilter) getLimiter(key string, r float64, b int) *rate.Limiter {

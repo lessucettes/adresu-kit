@@ -9,13 +9,18 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
+const (
+	sizeFilterName = "SizeFilter"
+)
+
 type SizeFilter struct {
 	cfg        *config.SizeFilterConfig
 	kindToRule map[int]*config.SizeRule
 }
 
-func NewSizeFilter(cfg *config.SizeFilterConfig) (*SizeFilter, []string, error) {
-	kindMap := make(map[int]*config.SizeRule, len(cfg.Rules))
+func NewSizeFilter(cfg *config.SizeFilterConfig) (*SizeFilter, error) {
+	kindMap := make(map[int]*config.SizeRule)
+
 	if cfg != nil {
 		for i := range cfg.Rules {
 			rule := &cfg.Rules[i]
@@ -26,31 +31,36 @@ func NewSizeFilter(cfg *config.SizeFilterConfig) (*SizeFilter, []string, error) 
 	}
 
 	filter := &SizeFilter{cfg: cfg, kindToRule: kindMap}
-
-	return filter, nil, nil
+	return filter, nil
 }
 
-func (f *SizeFilter) Match(ctx context.Context, event *nostr.Event, meta map[string]any) (bool, error) {
-	maxSize := f.cfg.DefaultMaxSize
-	description := "default event"
-	if rule, ok := f.kindToRule[event.Kind]; ok {
-		maxSize = rule.MaxSize
-		description = rule.Description
+func (f *SizeFilter) Match(_ context.Context, event *nostr.Event, meta map[string]any) (FilterResult, error) {
+	newResult := NewResultFunc(sizeFilterName)
+
+	maxSize := 0
+	if f.cfg != nil {
+		maxSize = f.cfg.DefaultMaxSize
 	}
 
-	if maxSize == 0 {
-		return true, nil
+	if rule, ok := f.kindToRule[event.Kind]; ok {
+		maxSize = rule.MaxSize
+	}
+
+	if maxSize <= 0 {
+		return newResult(true, "size_unlimited_for_kind", nil)
 	}
 
 	raw, err := json.Marshal(event)
 	if err != nil {
-		return false, fmt.Errorf("internal: failed to marshal event for size check: %w", err)
+		// This is a critical error, propagate it to the pipeline.
+		return newResult(false, "internal_marshal_failed", err)
 	}
 	size := len(raw)
 
 	if size > maxSize {
-		return false, fmt.Errorf("blocked: event size %d bytes exceeds limit of %d for %s", size, maxSize, description)
+		reason := fmt.Sprintf("event_too_large:size_%d,max_%d", size, maxSize)
+		return newResult(false, reason, nil)
 	}
 
-	return true, nil
+	return newResult(true, "size_ok", nil)
 }
