@@ -28,6 +28,7 @@ import (
 
 	"github.com/lessucettes/adresu-kit/config"
 	"github.com/lessucettes/adresu-kit/policy"
+
 	"github.com/nbd-wtf/go-nostr"
 )
 
