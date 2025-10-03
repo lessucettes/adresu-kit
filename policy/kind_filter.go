@@ -1,4 +1,3 @@
-// path: adresu-kit/policy/kind_filter.go
 package policy
 
 import (
@@ -6,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lessucettes/adresu-kit/config"
+
 	"github.com/nbd-wtf/go-nostr"
 )
 

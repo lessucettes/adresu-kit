@@ -6,6 +6,7 @@ import (
 	"maps"
 
 	"github.com/lessucettes/adresu-kit/config"
+
 	"github.com/nbd-wtf/go-nostr"
 )
 
