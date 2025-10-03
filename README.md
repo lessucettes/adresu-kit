@@ -26,10 +26,10 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/nbd-wtf/go-nostr"
+
 	"github.com/lessucettes/adresu-kit/config"
 	"github.com/lessucettes/adresu-kit/policy"
-
-	"github.com/nbd-wtf/go-nostr"
 )
 
 func main() {
